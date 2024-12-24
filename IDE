@@ -10,13 +10,14 @@ const int relaySolenoid = 6;   // Relay untuk solenoid valve
 
 // Sensor Pin
 const int flowPin = 2;         // Pin sensor waterflow
-const int trigPin = 3;         // Pin trig sensor ultrasonik
-const int echoPin = 4;         // Pin echo sensor ultrasonik
+const int trigPin = 9;         // Pin trig sensor ultrasonik
+const int echoPin = 13;        // Pin echo sensor ultrasonik
 
 volatile int pulseCount = 0;   // Hitungan pulsa sensor waterflow
 bool isFlowing = false;        // Status air mengalir
 unsigned long flowStartTime = 0;  // Waktu mulai mendeteksi aliran
 const unsigned long flowThreshold = 3000; // 3 detik dalam milidetik
+const float tankHeight = 19.0; // Tinggi tangki dalam cm
 
 // Fungsi interrupt untuk sensor waterflow
 void pulseCounter() {
@@ -58,13 +59,15 @@ void loop() {
       // Mulai hitung waktu ketika aliran pertama kali terdeteksi
       flowStartTime = millis();
     }
+  } else {
+    // Reset waktu jika tidak ada aliran
+    flowStartTime = 0;
+    isFlowing = false;
   }
 
   // Jika sudah 3 detik aliran terus-menerus, set status sebagai Mengalir
-  if (millis() - flowStartTime >= flowThreshold && pulses > 0) {
+  if (flowStartTime != 0 && millis() - flowStartTime >= flowThreshold) {
     isFlowing = true;
-  } else {
-    isFlowing = false;
   }
 
   // ===== Sensor Ultrasonik =====
@@ -82,41 +85,48 @@ void loop() {
   duration = pulseIn(echoPin, HIGH);
   distance = duration * 0.034 / 2; // Konversi durasi ke jarak (cm)
 
+  // Hitung persentase volume tangki terisi
+  float percentage = 0;
+  if (distance < tankHeight) {
+    percentage = ((tankHeight - distance) / 17) * 100.0;
+  }
+
   // ===== Kontrol Relay =====
   if (isFlowing) {
-    digitalWrite(relayPompa, HIGH); // Aktifkan pompa jika air mengalir
+    digitalWrite(relayPompa, HIGH); // Aktifkan pompa jika air mengalir selama lebih dari 3 detik
   } else {
     digitalWrite(relayPompa, LOW);  // Matikan pompa jika air tidak mengalir
   }
 
-  if (distance < 7) {
-    digitalWrite(relaySolenoid, HIGH); // Aktifkan solenoid jika penuh
+  if (distance < 5) {
+    digitalWrite(relaySolenoid, HIGH); // Aktifkan solenoid jika jarak kurang dari 5 cm
   } else {
-    digitalWrite(relaySolenoid, LOW);  // Matikan solenoid jika tidak penuh
+    digitalWrite(relaySolenoid, LOW);  // Matikan solenoid jika jarak lebih dari 5 cm
   }
 
   // ===== Tampilan di LCD =====
   lcd.setCursor(0, 0); // Baris pertama
-  if (isFlowing) {
-    lcd.print("Status: Mengalir");
-  } else {
-    lcd.print("Status: Tidak   ");
-  }
+  lcd.print("     Tangki    ");
 
   lcd.setCursor(0, 1); // Baris kedua
-  lcd.print("Status: ");
-  if (distance < 7) {
-    lcd.print("Penuh  "); // Tampilkan "Penuh" jika jarak kurang dari 7 cm
-  } else {
-    lcd.print("Kosong "); // Tampilkan "Kosong" jika jarak lebih dari 7 cm
-  }
+  lcd.print("Air Terisi: ");
+  lcd.print(percentage,0  );
+  lcd.setCursor(15, 1); // Baris kedua
+  lcd.print("%"); // Spasi untuk membersihkan sisa teks sebelumnya
 
+  
   // ===== Serial Monitor =====
   Serial.print("Status Air: ");
   Serial.println(isFlowing ? "Mengalir" : "Tidak");
   Serial.print("Jarak: ");
   Serial.print(distance);
   Serial.println(" cm");
+  Serial.print("Persentase: ");
+  Serial.print(percentage);
+  Serial.println("%");
+
 
   delay(1000); // Tunggu 1 detik
+  // Bersihkan layar
+  lcd.clear();
 }
